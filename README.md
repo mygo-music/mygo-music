@@ -1,43 +1,33 @@
-# 网易云音乐 · MyGo
+# MyGo 云音乐
 
-用 Go 和 [MyGo](https://github.com/egoist/mygo) 写的第三方网易云音乐桌面客户端，原生界面，无 WebView。
+原生地，安静地下线。
+
+网易云音乐来函，请本仓库「立即下线」。用 Go 写成的好处就在这里：启动快，下线更快。
+
+它只是用你自己的账号，放你自己买了会员的歌。现在不放了，不打扰你的电脑，也不打扰贵司。
 
 ## 功能
 
-- 扫码登录，登录态保存在系统凭据存储中
-- 每日推荐、推荐歌单、排行榜、我的歌单
-- 搜索单曲、歌手、专辑、用户与播客，输入时显示搜索建议，保留搜索历史
-- 歌手页的热门与最新歌曲、专辑与动态，关注歌手；专辑页与用户页
-- 播客：浏览与收听节目，订阅播客；在本机把节目转写成字幕（Qwen3-ASR），像歌词一样随播放滚动
-- 私人 FM（推荐 / 熟悉 / 探索）与心动模式
-- 边下边播，支持标准 / 较高 / 极高 / 无损（FLAC）/ Hi-Res 音质
-- 听过的歌曲缓存在本机，再次播放无需等待
-- 音量均衡，暂停与继续时淡出淡入，拖动进度无杂音
-- 退出后再打开，从上次的播放队列与进度继续
-- 逐字歌词与翻译，正在播放页的「律动」视图与歌曲评论
-- 刘海播放器：在屏幕顶部刘海处显示迷你播放器，悬停展开（在设置中开启）
-- 喜欢歌曲、播放队列、随机与循环播放
-- 浅色 / 深色 / 跟随系统
+- 五种音质的安静：标准、较高、极高、无损与 Hi-Res
+- 从上次停下的地方，就停在那儿了
+- 每日推荐：每天 6:00 不再更新。今日推荐：官方客户端
+- 扫码登录：请用网易云音乐 App，登录网易云音乐 App
+- 心动模式：收到来函那一刻，自动开启
+
+## 安装
+
+请前往[官方客户端](https://music.163.com/#/download)。基于 Chromium，装好有 354 MB，打开就用 700 MB 内存，但它有授权。
 
 ## 构建
 
-需要 Go 1.27+。
+没有什么可构建的了。构建时间因此缩短到 0 秒，这是本项目有史以来最大的一次性能优化。
 
-```bash
-go tool mygo dev     # 开发模式运行
-go tool mygo build   # 打包到 build/
-go test ./...        # 运行测试
-```
+## 贡献
+
+暂不接受 Pull Request。Issue 也请留给有授权的人。
 
 ## 致谢
 
-- [MyGo](https://github.com/egoist/mygo)：原生 UI 与应用框架
-- [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)：eapi 加密与登录流程的参考
-- [folia-major](https://github.com/chthollyphile/folia-major)：歌词动画效果的参考
-- [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 与 [Silero VAD](https://github.com/snakers4/silero-vad)：本机语音识别
+谢谢这 684 颗星，也谢谢听过的每一个人。
 
-本项目与网易云音乐官方无关，音乐版权归各权利人所有。
-
-## 许可证
-
-[AGPL-3.0](LICENSE)
+本项目与网易云音乐官方无关，这一点贵司和我们看法一致。
