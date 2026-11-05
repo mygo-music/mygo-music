@@ -1,9 +1,11 @@
 package player
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -221,5 +223,66 @@ func TestEndRadio(t *testing.T) {
 	p.refill()
 	if asked != 0 {
 		t.Error("asked the radio after leaving it")
+	}
+}
+
+// Where playback was left comes back as it was left, through the JSON the
+// app keeps it in: the queue, the song, the order of a shuffle, the repeat.
+// Nothing tested this, and the session's songs change shape with the
+// source they come from.
+func TestSessionRoundTrip(t *testing.T) {
+	a := New(func(func()) {})
+	a.Cue([]netease.Track{{ID: 1, Name: "一", Duration: 1000}, {ID: 2, Name: "二", Duration: 2000}, {ID: 3, Name: "三", Duration: 3000}})
+	a.ToggleShuffle()
+	a.CycleRepeat()
+	a.Next()
+	want, ok := a.Session()
+	if !ok {
+		t.Fatal("no session to keep with songs queued")
+	}
+	want.Position = 83000 // a moment into the song, as the clock would say
+
+	b, err := json.Marshal(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got Session
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("session changed through its JSON:\n got %+v\nwant %+v", got, want)
+	}
+
+	c := New(func(func()) {})
+	c.Restore(got)
+	if c.Current() == nil || c.Current().ID != a.Current().ID || len(c.Queue()) != 3 {
+		t.Fatalf("restored %v of %d songs, want song %d of 3", c.Current(), len(c.Queue()), a.Current().ID)
+	}
+	if c.Shuffle() != a.Shuffle() || c.Repeat() != a.Repeat() {
+		t.Fatalf("restored shuffle %v repeat %v, want %v %v", c.Shuffle(), c.Repeat(), a.Shuffle(), a.Repeat())
+	}
+	again, _ := c.Session()
+	if !reflect.DeepEqual(again.Order, want.Order) || again.At != want.At {
+		t.Fatalf("restored order %v at %d, want %v at %d", again.Order, again.At, want.Order, want.At)
+	}
+}
+
+// A session that cannot be a queue is left alone, not half restored: a
+// song out of the queue, an order that repeats a song.
+func TestRestoreRefusesBadSession(t *testing.T) {
+	queue := []netease.Track{{ID: 1}, {ID: 2}}
+	for name, s := range map[string]Session{
+		"no songs":           {},
+		"at past the end":    {Queue: queue, Order: []int{0, 1}, At: 2},
+		"order too short":    {Queue: queue, Order: []int{0}, At: 0},
+		"order repeats":      {Queue: queue, Order: []int{1, 1}, At: 0},
+		"order out of range": {Queue: queue, Order: []int{0, 5}, At: 0},
+	} {
+		p := New(func(func()) {})
+		p.Restore(s)
+		if p.Current() != nil || len(p.Queue()) != 0 {
+			t.Errorf("%s: restored %d songs", name, len(p.Queue()))
+		}
 	}
 }
