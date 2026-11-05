@@ -1,12 +1,12 @@
 # MyGo 音乐
 
-支持插件扩展的跨平台原生音乐播放器，用 Go 和 [MyGo](https://github.com/egoist/mygo) 写成，原生界面，无 WebView。
+音乐来源可由插件扩展的跨平台原生播放器，用 Go 和 [MyGo](https://github.com/egoist/mygo) 写成，原生界面，无 WebView。
 
-> **正在把「音乐来源」拆成插件。** 目前网易云音乐内置在应用里，之后会变成独立的官方插件，由插件 SDK 与插件市场提供扩展能力。播放内核（解码、缓存、淡入淡出、音量均衡、歌词、字幕）留在应用里，与具体来源无关。
+> **正在把「音乐来源」拆成插件。** 登录、搜索、歌单、取播放流等由插件提供，目前内置的来源会变成独立的官方插件。播放内核（解码、缓存、淡入淡出、音量均衡、歌词、字幕）留在应用里，与具体来源无关。
 
 ## 功能
 
-以下是目前内置的网易云音乐来源提供的功能：
+以下是目前内置的来源与播放内核提供的功能：
 
 - 扫码登录，登录态保存在系统凭据存储中
 - 每日推荐、推荐歌单、排行榜、我的歌单
@@ -23,6 +23,15 @@
 - 喜欢歌曲、播放队列、随机与循环播放
 - 浅色 / 深色 / 跟随系统
 
+## 安装与更新
+
+从 [Releases](https://github.com/mygo-music/mygo-music/releases) 下载对应系统的安装包。安装包没有经过代码签名与公证，所以首次打开时系统会拦一下：
+
+- macOS：在「系统设置 → 隐私与安全性」里点「仍要打开」。
+- Windows：SmartScreen 提示时点「更多信息 → 仍要运行」。
+
+应用不会自动更新。需要时在「设置 → 更新」里点「检查更新」，应用会查看本仓库最新的 Release，有新版本时显示更新内容并给出下载入口。
+
 ## 构建
 
 需要 Go 1.27+。
@@ -36,11 +45,10 @@ go test ./...        # 运行测试
 ## 致谢
 
 - [MyGo](https://github.com/egoist/mygo)：原生 UI 与应用框架
-- [NeteaseCloudMusicApi](https://github.com/Binaryify/NeteaseCloudMusicApi)：eapi 加密与登录流程的参考
 - [folia-major](https://github.com/chthollyphile/folia-major)：歌词动画效果的参考
 - [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx)、[Qwen3-ASR](https://github.com/QwenLM/Qwen3-ASR) 与 [Silero VAD](https://github.com/snakers4/silero-vad)：本机语音识别
 
-本项目与网易云音乐官方无关，音乐版权归各权利人所有。
+本项目与任何音乐服务提供方无关，音乐版权归各权利人所有。
 
 ## 许可证
 
