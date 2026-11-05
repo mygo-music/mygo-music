@@ -1,13 +1,17 @@
 // Command sherpa packs sherpa-onnx's libraries, which write podcasts'
 // captions on the device, for the app to download with the model: each
-// platform's, signed for macOS with the app's Developer ID so that its
-// hardened runtime loads them, and Silero's voice activity detector, which
-// every platform shares. It writes them, gzipped, into a directory to
-// upload as the assets of the release internal/speech downloads them from,
-// and internal/speech/natives.go, which names them with their digests:
+// platform's, and Silero's voice activity detector, which every platform
+// shares. It writes them, gzipped, into a directory to upload as the assets
+// of the release internal/speech downloads them from, and
+// internal/speech/natives.go, which names them with their digests:
 //
-//	go run ./scripts/sherpa -sign "Developer ID Application: …" -out build/sherpa
+//	go run ./scripts/sherpa -out build/sherpa
 //	gh release create sherpa-onnx-2.0.1 --prerelease --latest=false build/sherpa/*
+//
+// The macOS libraries are packed as sherpa-onnx built them. The app is not
+// signed with a Developer ID, so it runs without the hardened runtime, which
+// loads libraries of any signer. -sign signs them with an identity, on a Mac,
+// for an app whose hardened runtime asks for its own team's.
 //
 // The upstream archives are checked against their digests, and kept in the
 // user's cache between runs.
@@ -73,13 +77,9 @@ const (
 )
 
 func main() {
-	sign := flag.String("sign", "", "the Developer ID that signs the macOS libraries")
+	sign := flag.String("sign", "", "a Developer ID that signs the macOS libraries; empty leaves them as sherpa-onnx built them")
 	out := flag.String("out", "build/sherpa", "where to write the files to upload")
 	flag.Parse()
-	if *sign == "" {
-		fmt.Fprintln(os.Stderr, "sherpa: -sign is required: the app's hardened runtime loads no library signed by another team")
-		os.Exit(2)
-	}
 	if err := run(*sign, *out); err != nil {
 		fmt.Fprintln(os.Stderr, "sherpa:", err)
 		os.Exit(1)
@@ -135,7 +135,7 @@ func run(identity, out string) error {
 		}
 		for _, name := range a.files {
 			lib := filepath.Join(tmp, name)
-			if strings.HasPrefix(p, "darwin-") {
+			if strings.HasPrefix(p, "darwin-") && identity != "" {
 				cmd := exec.Command("codesign", "--force", "--sign", identity, "--options", "runtime", "--timestamp", lib)
 				if b, err := cmd.CombinedOutput(); err != nil {
 					return fmt.Errorf("codesign %s/%s: %v\n%s", p, name, err, b)
