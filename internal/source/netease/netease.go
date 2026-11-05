@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -22,8 +23,9 @@ const PluginID = "netease"
 
 // Source is NetEase Cloud Music.
 type Source struct {
-	mu  sync.Mutex
-	uid int64 // who is signed in, once known; 0 for nobody
+	mu   sync.Mutex
+	once sync.Once
+	uid  int64 // who is signed in, once known; 0 for nobody
 }
 
 var _ interface {
@@ -56,11 +58,12 @@ var _ interface {
 	source.Podcasts
 } = (*Source)(nil)
 
-// New returns the source, with the session the last run kept, if any.
-func New() *Source {
-	api.RestoreSession()
-	return &Source{}
-}
+// New returns the source. It reads the session the last run kept when it is
+// first asked who is signed in, not here: that reads the keychain.
+func New() *Source { return &Source{} }
+
+// restore reads the kept session, once.
+func (s *Source) restore() { s.once.Do(func() { apiRestoreSession() }) }
 
 var info = source.Info{
 	ID:   PluginID,
@@ -76,7 +79,7 @@ var info = source.Info{
 		source.FeatRadioSimilar, source.FeatRadioDislike, source.FeatCommentsLike,
 	},
 	SearchTypes: []string{
-		source.TypeTrack, source.TypeAlbum, source.TypeArtist, source.TypePlaylist, source.TypeUser, source.TypePodcast,
+		source.TypeTrack, source.TypeArtist, source.TypeAlbum, source.TypePlaylist, source.TypeUser, source.TypePodcast,
 	},
 	Qualities: api.Levels,
 }
@@ -95,6 +98,7 @@ const (
 // me returns who is signed in, asking the service the first time. Nobody
 // is ErrUnauthenticated.
 func (s *Source) me() (int64, error) {
+	s.restore()
 	// Held while the service is asked: a Logout waits for the answer, and so
 	// can't be undone by it.
 	s.mu.Lock()
@@ -102,7 +106,7 @@ func (s *Source) me() (int64, error) {
 	if s.uid != 0 {
 		return s.uid, nil
 	}
-	p, err := api.Account()
+	p, err := apiAccount()
 	if err != nil {
 		return 0, failed(err)
 	}
@@ -195,28 +199,29 @@ func (s *Source) Search(ctx context.Context, q source.SearchQuery) (*source.Page
 }
 
 func (s *Source) Suggest(ctx context.Context, query string) ([]source.SuggestGroup, error) {
-	res, err := api.SearchSuggest(query)
+	res, err := apiSearchSuggest(query)
 	if err != nil {
 		return nil, failed(err)
 	}
-	var groups []source.SuggestGroup
-	for _, kind := range res.Order {
-		switch kind {
-		case "songs":
-			groups = append(groups, source.SuggestGroup{Type: source.TypeTrack, Items: trackItems(res.Songs)})
-		case "artists":
-			ars := make([]api.ArtistProfile, len(res.Artists))
-			for i, a := range res.Artists {
-				ars[i] = api.ArtistProfile{Artist: a}
-			}
-			groups = append(groups, source.SuggestGroup{Type: source.TypeArtist, Items: artistItems(ars)})
-		case "albums":
-			groups = append(groups, source.SuggestGroup{Type: source.TypeAlbum, Items: albumItems(res.Albums)})
-		case "playlists":
-			groups = append(groups, source.SuggestGroup{Type: source.TypePlaylist, Items: playlistItems(res.Playlists)})
-		}
+	ars := make([]api.ArtistProfile, len(res.Artists))
+	for i, a := range res.Artists {
+		ars[i] = api.ArtistProfile{Artist: a}
 	}
-	return groups, nil
+	groups := map[string]source.SuggestGroup{
+		"songs":     {Type: source.TypeTrack, Items: trackItems(res.Songs)},
+		"artists":   {Type: source.TypeArtist, Items: artistItems(ars)},
+		"albums":    {Type: source.TypeAlbum, Items: albumItems(res.Albums)},
+		"playlists": {Type: source.TypePlaylist, Items: playlistItems(res.Playlists)},
+	}
+	var out []source.SuggestGroup
+	// The kinds in the order the service ranks them, then any it left out.
+	for _, kind := range append(slices.Clone(res.Order), "songs", "artists", "albums", "playlists") {
+		if g, ok := groups[kind]; ok && len(g.Items) > 0 {
+			out = append(out, g)
+		}
+		delete(groups, kind) // listed once, if also in the order
+	}
+	return out, nil
 }
 
 func (s *Source) Resolve(ctx context.Context, t *source.Track, quality string) (*source.Stream, error) {
@@ -284,8 +289,8 @@ func (s *Source) Artist(ctx context.Context, artistID string) (*source.ArtistPag
 	page := &source.ArtistPage{
 		Artist: artist(*ar),
 		Tabs: []source.Tab{
-			{ID: tabHot, Label: "热门歌曲", Type: source.TabTracks},
-			{ID: tabLatest, Label: "最新歌曲", Type: source.TabTracks},
+			{ID: tabHot, Label: "热门", Type: source.TabTracks},
+			{ID: tabLatest, Label: "最新", Type: source.TabTracks},
 			{ID: tabAlbums, Label: "专辑", Type: source.TabAlbums},
 		},
 		First: &source.FirstTab{Tab: tabHot, Items: trackItems(ar.Songs)},
@@ -359,7 +364,7 @@ func (s *Source) LoadTab(ctx context.Context, e source.EntityRef, tab, cursor st
 				return nil, err
 			}
 		}
-		events, last, more, err := api.Events(x.AccountID, eventsPage, before)
+		events, last, more, err := apiEvents(x.AccountID, eventsPage, before)
 		if err != nil {
 			return nil, failed(err)
 		}
@@ -413,13 +418,14 @@ func (s *Source) Lyrics(ctx context.Context, t *source.Track) (*source.Lyrics, e
 // Account.
 
 func (s *Source) AuthStatus(ctx context.Context) (*source.AuthStatus, error) {
-	p, err := api.Account()
+	s.restore()
+	p, err := apiAccount()
 	if err != nil {
 		return nil, failed(err)
 	}
 	if p == nil {
 		// The session expired, or there was none: forget it, in the keychain too.
-		api.ClearSession()
+		apiClearSession()
 		s.forget()
 		return &source.AuthStatus{}, nil
 	}
@@ -436,7 +442,7 @@ func (s *Source) AuthMethods(ctx context.Context) ([]source.LoginMethod, error) 
 // The QR login is polled every two seconds, as the app always has.
 const (
 	qrPollMS = 2000
-	qrHint   = "请使用网易云音乐 App 扫码登录"
+	qrHint   = "打开网易云音乐 App，扫一扫登录"
 )
 
 func (s *Source) AuthBegin(ctx context.Context, method string) (*source.Step, error) {
@@ -458,7 +464,7 @@ func (s *Source) AuthBegin(ctx context.Context, method string) (*source.Step, er
 }
 
 func (s *Source) AuthPoll(ctx context.Context, token string) (*source.Step, error) {
-	code, msg, nickname, avatar, err := api.QRCheck(token)
+	code, msg, nickname, avatar, err := apiQRCheck(token)
 	if err != nil {
 		return nil, failed(err)
 	}
@@ -471,7 +477,9 @@ func (s *Source) AuthPoll(ctx context.Context, token string) (*source.Step, erro
 		st.Hint = qrHint
 		return st, nil
 	case api.QRExpired:
-		return qr(source.QRExpired), nil
+		st := qr(source.QRExpired)
+		st.Hint = "二维码已失效"
+		return st, nil
 	case api.QRScanned:
 		st := qr(source.QRScanned)
 		st.Hint = "请在手机上确认登录"
@@ -479,7 +487,7 @@ func (s *Source) AuthPoll(ctx context.Context, token string) (*source.Step, erro
 		return st, nil
 	case api.QRConfirmed:
 		// Signed in for this run even if the session can't be kept for the next.
-		if err := api.SaveSession(); err != nil {
+		if err := apiSaveSession(); err != nil {
 			log.Println("netease: keeping the session:", err)
 		}
 		s.forget()
@@ -556,7 +564,7 @@ func (s *Source) LikedState(ctx context.Context, ts []source.Track) (map[string]
 		byProgram[n] = t.ID
 	}
 	if len(programs) > 0 {
-		liked, err := api.ProgramsLiked(programs)
+		liked, err := apiProgramsLiked(programs)
 		if err != nil {
 			return nil, failed(err)
 		}
@@ -573,13 +581,13 @@ func (s *Source) Like(ctx context.Context, t *source.Track, liked bool) error {
 		if err != nil {
 			return err
 		}
-		return failedOrNil(api.LikeProgram(n, liked))
+		return failedOrNil(apiLikeProgram(n, liked))
 	}
 	n, err := number(t.ID)
 	if err != nil {
 		return err
 	}
-	return failedOrNil(api.Like(n, liked))
+	return failedOrNil(apiLike(n, liked))
 }
 
 func failedOrNil(err error) error {
@@ -622,7 +630,7 @@ func (s *Source) Follow(ctx context.Context, artistID string, follow bool) error
 }
 
 func (s *Source) SubscribedPodcasts(ctx context.Context, cursor string) (*source.Page[source.Podcast], error) {
-	pods, err := api.SubscribedPodcasts()
+	pods, err := apiSubscribedPodcasts()
 	if err != nil {
 		return nil, failed(err)
 	}
@@ -726,12 +734,12 @@ func (s *Source) Home(ctx context.Context) ([]source.Section, error) {
 	_, err := s.me()
 	signedIn := err == nil
 	wg.Add(3)
-	go func() { defer wg.Done(); featured, featuredErr = api.FeaturedPlaylists(30) }()
-	go func() { defer wg.Done(); charts, chartsErr = api.Charts() }()
-	go func() { defer wg.Done(); daily, _ = api.DailySongs() }()
+	go func() { defer wg.Done(); featured, featuredErr = apiFeaturedPlaylists(30) }()
+	go func() { defer wg.Done(); charts, chartsErr = apiCharts() }()
+	go func() { defer wg.Done(); daily, _ = apiDailySongs() }()
 	if signedIn {
 		wg.Add(1)
-		go func() { defer wg.Done(); rec, _ = api.RecommendedPlaylists() }()
+		go func() { defer wg.Done(); rec, _ = apiRecommendedPlaylists() }()
 	}
 	wg.Wait()
 	if featuredErr != nil && chartsErr != nil {
@@ -802,13 +810,13 @@ func nextDailyAt(now time.Time) time.Time {
 func (s *Source) Section(ctx context.Context, sectionID, cursor string) (*source.Section, error) {
 	switch sectionID {
 	case sectionDaily:
-		daily, err := api.DailySongs()
+		daily, err := apiDailySongs()
 		if err != nil {
 			return nil, failed(err)
 		}
 		return &source.Section{ID: sectionDaily, Title: "每日推荐", Style: source.StyleHero, PlayAll: true, Items: trackItems(daily), ExpiresMS: nextDailyAt(time.Now()).UnixMilli()}, nil
 	case sectionCharts:
-		charts, err := api.Charts()
+		charts, err := apiCharts()
 		if err != nil {
 			return nil, failed(err)
 		}
@@ -938,11 +946,11 @@ func (s *Source) PodcastHome(ctx context.Context) ([]source.Section, error) {
 		signedIn = true
 	}
 	wg.Add(2)
-	go func() { defer wg.Done(); rec, recErr = api.RecommendedPodcasts() }()
-	go func() { defer wg.Done(); hot, hotMore, hotErr = api.HotPodcasts(podcastsPage, 0) }()
+	go func() { defer wg.Done(); rec, recErr = apiRecommendedPodcasts() }()
+	go func() { defer wg.Done(); hot, hotMore, hotErr = apiHotPodcasts(podcastsPage, 0) }()
 	if signedIn {
 		wg.Add(1)
-		go func() { defer wg.Done(); subs, _ = api.SubscribedPodcasts() }()
+		go func() { defer wg.Done(); subs, _ = apiSubscribedPodcasts() }()
 	}
 	wg.Wait()
 	if recErr != nil && hotErr != nil {
@@ -975,7 +983,7 @@ func (s *Source) PodcastSection(ctx context.Context, sectionID, cur string) (*so
 		return nil, source.ErrNotFound
 	}
 	offset := offsetOf(cur)
-	hot, more, err := api.HotPodcasts(podcastsPage, offset)
+	hot, more, err := apiHotPodcasts(podcastsPage, offset)
 	if err != nil {
 		return nil, failed(err)
 	}
