@@ -3,10 +3,12 @@ package app
 import (
 	"github.com/mygo-music/mygo-music/internal/netease"
 	"github.com/mygo-music/mygo-music/internal/player"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 func newTestApp() *app {
 	a := &app{
+		reg:       source.NewRegistry(&fakeSource{}),
 		playlists: map[int64]*netease.Playlist{}, loadingPl: map[int64]bool{}, plErr: map[int64]string{},
 		artists: map[int64]*artistData{}, albums: map[int64]*albumData{}, users: map[int64]*userData{},
 		podcasts: map[int64]*podcastData{}, podcastTab: &podcastTab{}, searches: map[route]*searchData{},

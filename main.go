@@ -4,10 +4,13 @@ import (
 	"log"
 
 	"github.com/mygo-music/mygo-music/internal/app"
+	"github.com/mygo-music/mygo-music/internal/source"
+	neteasesource "github.com/mygo-music/mygo-music/internal/source/netease"
 )
 
 func main() {
-	if err := app.Run(); err != nil {
+	// NetEase is the one source there is, built in, until plugins bring others.
+	if err := app.Run(source.NewRegistry(neteasesource.New())); err != nil {
 		log.Fatal(err)
 	}
 }

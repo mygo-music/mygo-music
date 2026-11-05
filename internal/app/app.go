@@ -9,6 +9,7 @@ import (
 
 	"github.com/mygo-music/mygo-music/internal/netease"
 	"github.com/mygo-music/mygo-music/internal/player"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 type pageKind int
@@ -40,6 +41,7 @@ type route struct {
 // on the main thread: by the views, and by goroutines through post.
 type app struct {
 	win   *mygo.Window
+	reg   *source.Registry // the music sources, and which of them shows
 	notch *notch
 	tray  *mygo.Tray // the icon in the menu bar or notification area, while it shows
 	art   *artCache
@@ -184,7 +186,7 @@ func (a *app) showMain() {
 }
 
 // Run runs the app until it quits.
-func Run() error {
+func Run(reg *source.Registry) error {
 	// Opening the app again shows the running one's window: Linux and
 	// Windows would start another, with a second tray icon. Asked before
 	// anything else, so the second one touches no data on its way out.
@@ -192,6 +194,7 @@ func Run() error {
 		return nil
 	}
 	a := &app{
+		reg:        reg,
 		playlists:  map[int64]*netease.Playlist{},
 		loadingPl:  map[int64]bool{},
 		plErr:      map[int64]string{},
