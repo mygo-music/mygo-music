@@ -1,6 +1,9 @@
 package app
 
 import (
+	"cmp"
+	"context"
+	"errors"
 	"runtime"
 	"time"
 
@@ -8,34 +11,40 @@ import (
 	"rsc.io/qr"
 
 	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 // loginState is a QR code login under way.
 type loginState struct {
 	open     bool
 	gen      int // counts logins, to stop the polls of closed ones
-	key      string
+	token    string
 	code     *qr.Code
-	status   int // a QR state, or 0 while the code loads
+	state    string // a source.QR state, or "" while the code loads
+	hint     string // what the source says to do, under the title
 	scanner  string
 	avatar   string
 	err      string
 	finished bool
 }
 
-// boot signs in with the session in the keychain, if any, then loads the
+// apply takes in a step of the login the source reports.
+func (l *loginState) apply(st *source.Step) {
+	l.state, l.hint = st.State, st.Hint
+	if st.User != nil && st.User.Name != "" {
+		l.scanner, l.avatar = st.User.Name, st.User.Avatar
+	}
+}
+
+// boot signs in with the session the source kept, if any, then loads the
 // home page for whoever is listening.
 func (a *app) boot() {
 	a.homeLoading = true
 	go func() {
 		var prof *netease.Profile
-		if netease.RestoreSession() {
-			p, err := netease.Account()
-			switch {
-			case err == nil && p == nil:
-				netease.ClearSession() // expired
-			case err == nil:
-				prof = p
+		if acc, ok := capOf[source.Account](a); ok {
+			if st, err := acc.AuthStatus(context.Background()); err == nil && st.LoggedIn {
+				prof = profileOf(st.User)
 			}
 		}
 		a.post(func() {
@@ -68,14 +77,21 @@ func (a *app) signedIn(prof *netease.Profile) {
 	a.loadMine(prof.UserID)
 }
 
+// openLogin begins a login with the shown source, which gives the QR code to
+// scan.
 func (a *app) openLogin() {
 	a.login = loginState{open: true, gen: a.login.gen + 1}
 	gen := a.login.gen
+	acc, ok := capOf[source.Account](a)
+	if !ok {
+		a.login.err = "这个来源不需要登录"
+		return
+	}
 	go func() {
-		key, err := netease.QRKey()
+		step, err := acc.AuthBegin(context.Background(), "qr")
 		var code *qr.Code
-		if err == nil {
-			code, err = qr.Encode(netease.LoginURL(key), qr.M)
+		if err == nil && step.Type == source.StepQR {
+			code, err = qr.Encode(step.Content, qr.M)
 		}
 		a.post(func() {
 			if gen != a.login.gen {
@@ -85,24 +101,22 @@ func (a *app) openLogin() {
 				a.login.err = "无法获取二维码，请检查网络"
 				return
 			}
-			a.login.key, a.login.code, a.login.status = key, code, netease.QRWaiting
-			a.pollLogin(gen, key)
+			a.login.token, a.login.code = step.Token, code
+			a.login.apply(step)
+			a.pollLogin(gen, acc, step)
 		})
 	}()
 }
 
-// pollLogin asks every two seconds whether the code was scanned, until the
-// login ends or the dialog closes.
-func (a *app) pollLogin(gen int, key string) {
+// pollLogin asks as the source says, every two seconds as a rule, whether
+// the code was scanned, until the login ends or the dialog closes.
+func (a *app) pollLogin(gen int, acc source.Account, begun *source.Step) {
+	every := time.Duration(cmp.Or(begun.PollMS, 2000)) * time.Millisecond
+	token := begun.Token
 	go func() {
 		for {
-			time.Sleep(2 * time.Second)
-			code, msg, name, avatar, err := netease.QRCheck(key)
-			var prof *netease.Profile
-			if code == netease.QRConfirmed {
-				netease.SaveSession()
-				prof, _ = netease.Account()
-			}
+			time.Sleep(every)
+			step, err := acc.AuthPoll(context.Background(), token)
 			done := make(chan bool, 1)
 			a.post(func() {
 				l := &a.login
@@ -111,33 +125,38 @@ func (a *app) pollLogin(gen int, key string) {
 					return
 				}
 				switch {
-				case err != nil:
+				case errors.Is(err, source.ErrNetwork):
 					// Try again: the network may come back.
-				case code == netease.QRConfirmed:
-					l.status, l.finished = code, true
+				case err != nil:
+					l.err = loginError(err)
+				case step.Type == source.StepDone:
+					l.finished, l.state = true, ""
+					prof := profileOf(step.User)
 					a.signedIn(prof)
 					if prof != nil {
 						a.pickUp(prof.UserID)
 					}
 					a.closeLoginSoon(gen)
-				case code == netease.QRExpired || code == netease.QRWaiting || code == netease.QRScanned:
-					l.status = code
-					if name != "" {
-						l.scanner, l.avatar = name, avatar
-					}
-				default:
-					l.err = msg
-					if l.err == "" {
-						l.err = "登录失败，请稍后再试"
-					}
+				case step.Type == source.StepQR:
+					l.apply(step)
 				}
-				done <- l.status == netease.QRExpired || l.finished || l.err != ""
+				done <- l.state == source.QRExpired || l.finished || l.err != ""
 			})
 			if <-done {
 				return
 			}
 		}
 	}()
+}
+
+// loginError is what a source's refusal to sign in says, in its own words
+// when it has some.
+func loginError(err error) string {
+	var e *source.Error
+	if errors.As(err, &e) && e.Message != "" {
+		return e.Message
+	}
+	return "登录失败，请稍后再试"
 }
 
 // closeLoginSoon closes the dialog a moment after it showed the welcome.
@@ -155,7 +174,9 @@ func (a *app) closeLoginSoon(gen int) {
 func (a *app) signOut() {
 	a.login.gen++
 	a.signedIn(nil)
-	go netease.Logout()
+	if acc, ok := capOf[source.Account](a); ok {
+		go acc.Logout(context.Background())
+	}
 }
 
 // loginDialog shows the QR code to scan with the NetEase app on a phone.
@@ -167,16 +188,16 @@ func (a *app) loginDialog(c *ui.Context) {
 		panel.Width(340).Padding(28, 28, 26, 28).Radius(22).Gap(6).AlignItems(ui.Center).
 			Background(p.bg).Border(1, p.hairline).Shadow(0, 24, 60, -12, ui.RGBA(0, 0, 0, 0.4)).
 			Transition(ui.ElementTransition{Animation: &ui.Snappy, Enter: &ui.Motion{Scale: 0.94}, Exit: &ui.Motion{Scale: 0.96}})
-		title, sub := "扫码登录", "打开网易云音乐 App，扫一扫登录"
+		title, sub := "扫码登录", cmp.Or(l.hint, "打开"+a.sourceName()+" App，扫一扫登录")
 		switch {
 		case l.finished:
 			title, sub = "登录成功", "欢迎回来，"+a.profileName()
 		case l.err != "":
 			sub = l.err
-		case l.status == netease.QRScanned:
-			title, sub = "扫描成功", "请在手机上确认登录"
-		case l.status == netease.QRExpired:
-			sub = "二维码已失效"
+		case l.state == source.QRScanned:
+			title, sub = "扫描成功", cmp.Or(l.hint, "请在手机上确认登录")
+		case l.state == source.QRExpired:
+			sub = cmp.Or(l.hint, "二维码已失效")
 		}
 		ui.Text(c, title).FontSize(20).FontWeight(700)
 		ui.Text(c, sub).FontSize(13).TextColor(p.muted).TextAlign(ui.Center).Margin(0, 0, 14, 0)
@@ -185,7 +206,7 @@ func (a *app) loginDialog(c *ui.Context) {
 			if l.code != nil {
 				code := l.code
 				opacity := float32(1)
-				if l.status == netease.QRScanned || l.status == netease.QRExpired || l.finished || l.err != "" {
+				if l.state == source.QRScanned || l.state == source.QRExpired || l.finished || l.err != "" {
 					opacity = 0.12
 				}
 				ui.Box(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Opacity(opacity).
@@ -197,8 +218,8 @@ func (a *app) loginDialog(c *ui.Context) {
 			}
 			ui.Column(c).Absolute().Top(0).Left(0).Right(0).Bottom(0).Center().Gap(10).Children(func() {
 				switch {
-				case l.finished || l.status == netease.QRScanned:
-					if bmp := bitmap(a.art.get(netease.Sized(l.avatar, 160), false)); bmp != nil {
+				case l.finished || l.state == source.QRScanned:
+					if bmp := bitmap(a.art.get(source.Sized(l.avatar, 160), false)); bmp != nil {
 						pic := ui.Box(c).Size(72, 72).Radius(36).Shadow(0, 6, 16, -4, ui.RGBA(0, 0, 0, 0.3))
 						in := artIn(pic, bmp)
 						pic.Children(func() { artImage(c, bmp, 36, in) })
@@ -206,7 +227,7 @@ func (a *app) loginDialog(c *ui.Context) {
 					if l.scanner != "" {
 						ui.Text(c, l.scanner).FontSize(14).FontWeight(600).TextColor(ui.Hex("#1d1d1f"))
 					}
-				case l.status == netease.QRExpired || l.err != "":
+				case l.state == source.QRExpired || l.err != "":
 					if pillButton(c.Key("refresh"), iconRepeat, "刷新二维码", p.accent, p.onAccent).Clicked() {
 						a.openLogin()
 					}

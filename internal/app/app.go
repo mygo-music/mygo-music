@@ -40,13 +40,14 @@ type route struct {
 // app is the state both windows show. Everything in it is read and changed
 // on the main thread: by the views, and by goroutines through post.
 type app struct {
-	win   *mygo.Window
-	reg   *source.Registry // the music sources, and which of them shows
-	notch *notch
-	tray  *mygo.Tray // the icon in the menu bar or notification area, while it shows
-	art   *artCache
-	pl    *player.Player
-	pal   palette
+	win    *mygo.Window
+	reg    *source.Registry // the music sources, and which of them shows
+	posted chan func()      // in tests, where post sends what it is given without a window
+	notch  *notch
+	tray   *mygo.Tray // the icon in the menu bar or notification area, while it shows
+	art    *artCache
+	pl     *player.Player
+	pal    palette
 
 	route   route
 	history []route
@@ -150,9 +151,16 @@ type app struct {
 }
 
 // post runs fn on the main thread and redraws both windows. Without a
-// window, as in tests, it drops fn.
+// window, as in tests, it drops fn, unless the test asked to have what is
+// posted (see posted).
 func (a *app) post(fn func()) {
 	if a.win == nil {
+		if a.posted != nil {
+			select {
+			case a.posted <- fn:
+			default:
+			}
+		}
 		return
 	}
 	a.win.Update(func() {
