@@ -7,7 +7,7 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 func TestNowPlayingClosesAsOneLayer(t *testing.T) {

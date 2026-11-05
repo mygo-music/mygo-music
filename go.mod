@@ -1,5 +1,4 @@
-module netease-music-mygo
-
+module github.com/mygo-music/mygo-music
 go 1.27.3
 
 tool github.com/egoist/mygo/cmd/mygo

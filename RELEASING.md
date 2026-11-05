@@ -39,7 +39,7 @@
 6. Check the update feed shows the new version:
 
    ```bash
-   curl -sL https://github.com/egoist/mygo-cloudmusic/releases/latest/download/update-darwin-arm64.json
+   curl -sL https://github.com/mygo-music/mygo-music/releases/latest/download/update-darwin-arm64.json
    ```
 
 7. Deploy the website. It reads the latest release when it's prerendered, so it has to be rebuilt after publishing:
@@ -48,7 +48,7 @@
    cd website && bun run deploy
    ```
 
-   Then check https://mygo-cloudmusic.egoist.workers.dev/download/ shows the new version.
+   Then check the website's download page shows the new version.
 
 ## The speech recognition libraries
 

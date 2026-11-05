@@ -6,9 +6,9 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/lyrics"
-	"netease-music-mygo/internal/netease"
-	"netease-music-mygo/internal/speech"
+	"github.com/mygo-music/mygo-music/internal/lyrics"
+	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/speech"
 )
 
 // captionsPane shows the episode playing's captions as lyrics show, in

@@ -1,12 +1,12 @@
 {
-  "name": "MyGo 云音乐",
-  "identifier": "dev.egoist.cloudmusic",
-  "slug": "mygo-cloudmusic",
+  "name": "MyGo 音乐",
+  "identifier": "io.github.mygo_music.MyGoMusic",
+  "slug": "mygo-music",
   "version": "0.1.25",
   "out": "build",
   "updates": {
     "publicKey": "WzJsOGNIuf6mcEqo5ff8jub+NoQQOEk4JXreLPYjgyQ=",
-    "github": "egoist/mygo-cloudmusic"
+    "github": "mygo-music/mygo-music"
   },
   "macos": {
     "icon": "icon/AppIcon.icon",
@@ -15,7 +15,7 @@
     "notarize": { "keychainProfile": "notary" }
   },
   "linux": {
-    "comment": "第三方网易云音乐桌面客户端",
+    "comment": "支持插件扩展的跨平台原生音乐播放器",
     "categories": ["AudioVideo", "Audio", "Player"],
     "webview": false
   }

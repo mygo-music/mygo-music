@@ -6,8 +6,8 @@ import (
 
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/lyrics"
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/lyrics"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 // The stage shows lyrics as Folia's classic visualizer does: one line at a

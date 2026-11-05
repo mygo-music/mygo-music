@@ -7,8 +7,8 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/netease"
-	"netease-music-mygo/internal/player"
+	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/player"
 )
 
 type pageKind int

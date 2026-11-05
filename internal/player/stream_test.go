@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 func TestFrameSize(t *testing.T) {

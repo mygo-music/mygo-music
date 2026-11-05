@@ -7,8 +7,8 @@ import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/lyrics"
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/lyrics"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 // The wall lays the queue out as a wall of its covers, under the song

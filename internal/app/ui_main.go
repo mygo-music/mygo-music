@@ -7,7 +7,7 @@ import (
 	"github.com/egoist/mygo/plugins/glass"
 	"github.com/egoist/mygo/ui"
 
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 const sidebarWidth = 232

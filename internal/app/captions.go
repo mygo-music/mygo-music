@@ -12,8 +12,8 @@ import (
 
 	"github.com/egoist/mygo"
 
-	"netease-music-mygo/internal/lyrics"
-	"netease-music-mygo/internal/speech"
+	"github.com/mygo-music/mygo-music/internal/lyrics"
+	"github.com/mygo-music/mygo-music/internal/speech"
 )
 
 // An episode's captions are written down on the device, as it plays:

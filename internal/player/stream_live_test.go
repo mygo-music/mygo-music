@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 func TestStreamLive(t *testing.T) {

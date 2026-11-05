@@ -16,7 +16,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	_ "golang.org/x/image/webp"
 
-	"netease-music-mygo/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
 // artwork is a cover, decoded and ready to draw, with what the player
