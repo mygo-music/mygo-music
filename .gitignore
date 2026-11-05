@@ -3,3 +3,16 @@
 mygo_windows_*.syso
 /netease-music-mygo
 /node_modules/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.TemporaryItems
+.DocumentRevisions-V100
+.VolumeIcon.icns
+__MACOSX/
