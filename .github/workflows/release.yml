@@ -1,7 +1,8 @@
 # Pushing a tag such as v0.2.0 builds the apps of macOS, Windows and
-# Linux, signs them and their updates, and uploads them to a draft
-# release of the tag, which is published by hand: installed apps update
-# to it then.
+# Linux and uploads their installers to a draft release of the tag, which
+# is published by hand. Nothing is signed or notarized, and the app does
+# not update itself: people download a release when the app, asked in its
+# settings, tells them there is one.
 name: Release
 
 on:
@@ -16,13 +17,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # mygo build uploads to the release of mygo.json's version, whichever
-      # tag started the workflow.
       - name: Check the version
         run: test "$GITHUB_REF_NAME" = "v$(jq -r .version mygo.json)"
-      # mygo build puts the version's section of CHANGELOG.md in the update
-      # manifests, which the update window shows; the release page gets the
-      # same notes, in place of GitHub's from the pull requests.
+      # The release page gets the version's section of CHANGELOG.md, which
+      # the app shows too when it finds the release.
       - name: Take the notes from the changelog
         run: |
           awk -v heading="## ${GITHUB_REF_NAME#v}" '
@@ -59,34 +57,23 @@ jobs:
       - name: Install NSIS, for the Windows installers
         if: matrix.name == 'Windows'
         run: sudo apt-get update && sudo apt-get install -y nsis
-      # The certificate signs the app; the notary profile, "notary" in
-      # mygo.json, notarizes its disk image. Both go in a keychain of the
-      # job, made the default one, where codesign and notarytool look.
-      - name: Import the certificate and the notary credentials
-        if: matrix.name == 'macOS'
-        env:
-          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
-          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
-        run: |
-          keychain="$RUNNER_TEMP/signing.keychain-db"
-          password="$(openssl rand -base64 24)"
-          security create-keychain -p "$password" "$keychain"
-          security set-keychain-settings -lut 21600 "$keychain"
-          security unlock-keychain -p "$password" "$keychain"
-          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" \
-            -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
-          rm "$RUNNER_TEMP/certificate.p12"
-          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
-          security list-keychains -d user -s "$keychain" login.keychain
-          security default-keychain -d user -s "$keychain"
-          xcrun notarytool store-credentials notary --keychain "$keychain" \
-            --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" --password "$APPLE_APP_PASSWORD"
-      - name: Build and upload
+      # Without a Developer ID the macOS app is signed ad hoc, which is all
+      # Apple silicon needs to run it; Gatekeeper asks people to allow it.
+      - name: Build
+        run: go tool mygo build -platform "${{ matrix.platform }}"
+      # What people download: the disk images, the Windows installers, and
+      # on Linux the Debian packages and the archives. `mygo build -upload`
+      # needs the keys of the updates this app no longer has.
+      - name: Upload to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
-          MYGO_UPDATER_PRIVATE_KEY: ${{ secrets.MYGO_UPDATER_PRIVATE_KEY }}
-        run: go tool mygo build -platform "${{ matrix.platform }}" -upload
+        shell: bash
+        run: |
+          # bash 3.2 on macOS has no mapfile, and its xargs no -a.
+          files=()
+          while IFS= read -r -d '' f; do files+=("$f"); done < <(
+            find build -type f \( -name '*.dmg' -o -name '*-setup-*.exe' -o -name '*.deb' -o -name '*-linux-*.tar.gz' \) -print0
+          )
+          test "${#files[@]}" -gt 0
+          ls -l "${files[@]}"
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"

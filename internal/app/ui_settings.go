@@ -2,7 +2,7 @@ package app
 
 import (
 	"runtime"
-	"time"
+	"strings"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -238,30 +238,19 @@ func (a *app) settingsView(c *ui.Context) {
 			})
 		})
 
-		if a.updates {
-			group("更新", func() {
-				desc := "每天检查一次是否有新版本"
-				if t := lastUpdateCheck(); !t.IsZero() {
-					desc += "；上次检查：" + commentTime(t, time.Now())
+		group("更新", func() {
+			row("当前版本 "+appVersion(), a.updateStatus(), func() {
+				if ui.Button(c.Key("check-updates"), "检查更新").Disabled(a.update.checking).Clicked() {
+					a.checkUpdates()
 				}
-				row("自动检查更新", desc, func() {
-					on := updateChecks()
-					if ui.Switch(c.Key("update-checks"), &on).Label("自动检查更新").Changed() {
-						setUpdateChecks(on)
-					}
-				})
-				row("自动下载并安装", "在后台下载新版本，下次打开时生效", func() {
-					on := updateDownloads()
-					if ui.Switch(c.Key("update-downloads"), &on).Label("自动下载并安装").Disabled(!updateChecks()).Changed() {
-						setUpdateDownloads(on)
-					}
-				})
-				row("当前版本 "+mygo.App.Version(), "", func() {
-					if ui.Button(c.Key("check-updates"), "检查更新").Clicked() {
-						checkForUpdates()
-					}
-				})
 			})
-		}
+			if rel := a.update.found; rel != nil {
+				row("新版本 "+strings.TrimPrefix(rel.Tag, "v"), releaseSummary(rel.Notes), func() {
+					if ui.Button(c.Key("download-update"), "前往下载").Clicked() {
+						a.openRelease(rel)
+					}
+				})
+			}
+		})
 	})
 }

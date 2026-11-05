@@ -1,108 +1,139 @@
 package app
 
 import (
-	"os"
-	"path/filepath"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/egoist/mygo/ui"
-
-	"github.com/mygo-music/mygo-music/internal/netease"
 )
 
-// fakeUpdater swaps the update plugin's preferences for ones in memory,
-// counting the checks asked for, until the returned function puts them
-// back.
-func fakeUpdater(checks, downloads *bool, checked *int) func() {
-	check, getChecks, setChecks := checkForUpdates, updateChecks, setUpdateChecks
-	getDownloads, setDownloads, last := updateDownloads, setUpdateDownloads, lastUpdateCheck
-	checkForUpdates = func() { *checked++ }
-	updateChecks = func() bool { return *checks }
-	setUpdateChecks = func(on bool) { *checks = on }
-	updateDownloads = func() bool { return *downloads }
-	setUpdateDownloads = func(on bool) { *downloads = on }
-	lastUpdateCheck = func() time.Time { return time.Time{} }
-	return func() {
-		checkForUpdates, updateChecks, setUpdateChecks = check, getChecks, setChecks
-		updateDownloads, setUpdateDownloads, lastUpdateCheck = getDownloads, setDownloads, last
-	}
-}
-
-// Turning off checking for updates turns it off in the updater, and
-// installing updates without asking can't be turned on without it.
-func TestTurnOffUpdateChecks(t *testing.T) {
-	checks, downloads, checked := true, false, 0
-	defer fakeUpdater(&checks, &downloads, &checked)()
-	a := newTestApp()
-	a.settings = defaultSettings()
-	a.updates = true
-	tt := ui.NewTester(a.settingsView, 560, 2000)
-	tt.Frame()
-	// The row's title is labelled as its switch is: click the switch, at
-	// the row's end.
-	toggle := func(title, desc string) {
-		t.Helper()
-		top, ok1 := tt.Find(title)
-		bottom, ok2 := tt.Find(desc)
-		if !ok1 || !ok2 {
-			t.Fatalf("no row %s", title)
+// A release is new only when its number is higher; a prerelease comes
+// before its release, and a version that is no number, a development
+// build's, is new when it differs.
+func TestIsNewer(t *testing.T) {
+	for _, c := range []struct {
+		latest, current string
+		want            bool
+	}{
+		{"v0.1.26", "0.1.25", true},
+		{"0.1.25", "0.1.25", false},
+		{"v0.1.24", "0.1.25", false},
+		{"v0.2.0", "0.1.99", true},
+		{"v1.0.0", "0.9.9", true},
+		{"v0.1.10", "0.1.9", true}, // numbers, not text
+		{"v0.2.0", "0.2.0-beta.1", true},
+		{"v0.2.0-beta.2", "0.2.0", false},
+		{"v0.2.0", "dev", true},
+	} {
+		if got := isNewer(c.latest, c.current); got != c.want {
+			t.Errorf("isNewer(%q, %q) = %v, want %v", c.latest, c.current, got, c.want)
 		}
-		tt.ClickAt(560-28-16-12, (top.Y+bottom.Y+bottom.H)/2)
-		tt.Frame()
-	}
-	toggle("自动检查更新", "每天检查一次是否有新版本")
-	if checks {
-		t.Fatal("checks for updates still")
-	}
-	toggle("自动下载并安装", "在后台下载新版本，下次打开时生效")
-	if downloads {
-		t.Fatal("turned on installing updates without checking for them")
-	}
-	// It does turn on while the updater checks.
-	checks = true
-	tt.Frame()
-	toggle("自动下载并安装", "在后台下载新版本，下次打开时生效")
-	if !downloads {
-		t.Fatal("didn't turn on installing updates")
 	}
 }
 
-// 检查更新 in the settings checks for updates as the user asked.
+// 检查更新 in the settings looks for the latest release, once however many
+// times it is asked while the look is under way.
 func TestCheckForUpdatesFromSettings(t *testing.T) {
-	checks, downloads, checked := true, false, 0
-	defer fakeUpdater(&checks, &downloads, &checked)()
+	asked, gate := make(chan struct{}, 4), make(chan struct{})
+	real := latestRelease
+	latestRelease = func() (*release, error) {
+		asked <- struct{}{}
+		<-gate
+		return nil, errNoRelease
+	}
+	defer func() { latestRelease = real }()
+	defer close(gate)
+
 	a := newTestApp()
 	a.settings = defaultSettings()
-	a.updates = true
-	a.profile = &netease.Profile{UserID: 1}
 	tt := ui.NewTester(a.settingsView, 560, 2000)
 	tt.Frame()
 	if err := tt.Click("检查更新"); err != nil {
 		t.Fatal(err)
 	}
-	if checked != 1 {
-		t.Fatalf("checked %d times", checked)
+	select {
+	case <-asked:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the release was not looked up")
+	}
+	a.checkUpdates()
+	a.checkUpdates()
+	select {
+	case <-asked:
+		t.Fatal("looked up again while looking")
+	case <-time.After(50 * time.Millisecond):
 	}
 }
 
-// The data kept under the app's old name moves to the directory of its
-// name, which Path made empty, but not over data kept there already.
-func TestMoveOldData(t *testing.T) {
-	root := t.TempDir()
-	old, dir := filepath.Join(root, oldName), filepath.Join(root, "MyGo 音乐")
-	os.MkdirAll(old, 0o700)
-	os.WriteFile(filepath.Join(old, "settings.json"), []byte("old"), 0o600)
-	os.MkdirAll(dir, 0o700)
-	moveDir(old, dir)
-	if b, _ := os.ReadFile(filepath.Join(dir, "settings.json")); string(b) != "old" {
-		t.Fatalf("settings %q after moving", b)
+// A newer release is offered with a button that opens its page; the version
+// running, or none published yet, offers nothing.
+func TestOfferNewRelease(t *testing.T) {
+	realVersion, realOpen := appVersion, openLink
+	defer func() { appVersion, openLink = realVersion, realOpen }()
+	appVersion = func() string { return "0.1.25" }
+	var opened string
+	openLink = func(url string) error { opened = url; return nil }
+
+	a := newTestApp()
+	a.settings = defaultSettings()
+	tt := ui.NewTester(a.settingsView, 560, 2000)
+	tt.Frame()
+
+	a.updateChecked(&release{Tag: "v0.1.26", Notes: "- 修好了一个问题\n", URL: "https://example.test/r"}, nil)
+	tt.Frame()
+	if err := tt.Click("前往下载"); err != nil {
+		t.Fatal(err)
+	}
+	if opened != "https://example.test/r" {
+		t.Fatalf("opened %q", opened)
 	}
 
-	os.MkdirAll(old, 0o700)
-	os.WriteFile(filepath.Join(old, "settings.json"), []byte("older"), 0o600)
-	moveDir(old, dir)
-	if b, _ := os.ReadFile(filepath.Join(dir, "settings.json")); string(b) != "old" {
-		t.Fatalf("settings %q, moved over what was there", b)
+	for _, answer := range []struct {
+		rel *release
+		err error
+	}{
+		{&release{Tag: "v0.1.25", URL: "https://example.test/same"}, nil},
+		{nil, errNoRelease},
+	} {
+		a.updateChecked(answer.rel, answer.err)
+		tt.Frame()
+		if _, ok := tt.Find("前往下载"); ok {
+			t.Fatalf("offered a download after %v", answer)
+		}
+	}
+}
+
+// The latest release is read from what GitHub answers, a 404 meaning none
+// has been published, and the request names the app, as GitHub requires.
+func TestFetchLatestRelease(t *testing.T) {
+	var agent string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		agent = r.Header.Get("User-Agent")
+		if r.URL.Path == "/none" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Write([]byte(`{"tag_name":"v0.2.0","body":"- 新功能","html_url":"https://example.test/r","draft":false}`))
+	}))
+	defer srv.Close()
+	realAPI, realVersion := releaseAPI, appVersion
+	defer func() { releaseAPI, appVersion = realAPI, realVersion }()
+	appVersion = func() string { return "0.1.25" }
+
+	releaseAPI = srv.URL + "/latest"
+	rel, err := fetchLatestRelease()
+	if err != nil || rel.Tag != "v0.2.0" || rel.URL != "https://example.test/r" || rel.Notes != "- 新功能" {
+		t.Fatalf("release %+v, error %v", rel, err)
+	}
+	if agent != "MyGo-Music/0.1.25" {
+		t.Fatalf("User-Agent %q", agent)
+	}
+
+	releaseAPI = srv.URL + "/none"
+	if _, err := fetchLatestRelease(); !errors.Is(err, errNoRelease) {
+		t.Fatalf("error %v, want none published", err)
 	}
 }

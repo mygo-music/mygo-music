@@ -139,8 +139,8 @@ type app struct {
 
 	settings    settings
 	settingsWin *mygo.Window
-	cacheUsed   int64 // the bytes the song cache takes, -1 until measured
-	updates     bool  // the update plugin is used (useUpdater)
+	cacheUsed   int64       // the bytes the song cache takes, -1 until measured
+	update      updateState // what the last look for a new version found
 
 	restored     bool   // playback picked up where it was left
 	savedSession string // the session as last kept
@@ -206,7 +206,6 @@ func Run() error {
 		cacheUsed:  -1,
 	}
 	moveOldData()
-	a.useUpdater()
 	mygo.App.WhenReady(func() {
 		a.settings = loadSettings()
 		a.settings.applyAppearance()

@@ -4,15 +4,9 @@
   "slug": "mygo-music",
   "version": "0.1.25",
   "out": "build",
-  "updates": {
-    "publicKey": "WzJsOGNIuf6mcEqo5ff8jub+NoQQOEk4JXreLPYjgyQ=",
-    "github": "mygo-music/mygo-music"
-  },
   "macos": {
     "icon": "icon/AppIcon.icon",
-    "minimumSystemVersion": "13.0",
-    "signingIdentity": "Developer ID Application: xinyu zeng (GJE9R5VE87)",
-    "notarize": { "keychainProfile": "notary" }
+    "minimumSystemVersion": "13.0"
   },
   "linux": {
     "comment": "支持插件扩展的跨平台原生音乐播放器",
