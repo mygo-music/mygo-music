@@ -25,7 +25,7 @@ function Hero() {
       <div class="grooves" aria-hidden="true" />
       <div class="hero-text">
         <p class="eyebrow">
-          <span class="pill">开源</span>音乐来源可由插件扩展的原生播放器
+          <span class="pill">开源</span>原生的跨平台音乐播放器
         </p>
         <h1 class="display hero-title">
           <span>原生地，</span>

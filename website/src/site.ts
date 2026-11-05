@@ -10,7 +10,7 @@ export const mygo = 'https://mygo.egoist.dev'
 
 export const site = {
   name: 'MyGo 音乐',
-  title: 'MyGo 音乐 — 音乐来源可由插件扩展的原生播放器',
+  title: 'MyGo 音乐 — 原生的跨平台音乐播放器',
   description:
-    '用 Go 与 MyGo 写成的跨平台原生音乐播放器，音乐来源可由插件扩展。原生界面，没有 WebView；边下边播，无损与 Hi-Res，逐字歌词与「律动」，刘海播放器。',
+    '用 Go 与 MyGo 写成的跨平台原生音乐播放器。原生界面，没有 WebView；边下边播，无损与 Hi-Res，逐字歌词与「律动」，刘海播放器。',
 }

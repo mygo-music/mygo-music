@@ -13,7 +13,7 @@
 set -euo pipefail
 
 name="MyGo 音乐"
-id="io.github.mygo_music.MyGoMusic"
+id="io.github.mygo-music.MyGoMusic"
 release=0 keep_login=0 songs=0
 for arg in "$@"; do
 	case "$arg" in

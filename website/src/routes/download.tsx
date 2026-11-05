@@ -24,7 +24,7 @@ const platforms: { os: OS; name: string; note: string; builds: Build[] }[] = [
   {
     os: 'mac',
     name: 'macOS',
-    note: 'macOS 13 或更新，已签名并经过 Apple 公证',
+    note: 'macOS 13 或更新。没有经过 Apple 公证，首次打开需在「系统设置 → 隐私与安全性」里点「仍要打开」',
     builds: [
       { label: 'Apple 芯片', kind: '.dmg', match: has('arm64', '.dmg'), primary: true },
       { label: 'Intel', kind: '.dmg', match: has('amd64', '.dmg') },
@@ -33,7 +33,7 @@ const platforms: { os: OS; name: string; note: string; builds: Build[] }[] = [
   {
     os: 'windows',
     name: 'Windows',
-    note: '安装到当前用户，无需管理员权限',
+    note: '安装到当前用户，无需管理员权限。SmartScreen 提示时点「更多信息 → 仍要运行」',
     builds: [
       { label: 'x64', kind: '安装程序', match: has('setup', 'amd64', '.exe'), primary: true },
       { label: 'ARM64', kind: '安装程序', match: has('setup', 'arm64', '.exe') },
@@ -42,7 +42,7 @@ const platforms: { os: OS; name: string; note: string; builds: Build[] }[] = [
   {
     os: 'linux',
     name: 'Linux',
-    note: 'Debian 与 Ubuntu 用 .deb；其他发行版用压缩包或下面的命令',
+    note: 'Debian 与 Ubuntu 用 .deb；其他发行版用压缩包',
     builds: [
       { label: 'x64', kind: '.deb', match: has('amd64', '.deb'), primary: true },
       { label: 'ARM64', kind: '.deb', match: has('arm64', '.deb') },
@@ -51,9 +51,6 @@ const platforms: { os: OS; name: string; note: string; builds: Build[] }[] = [
     ],
   },
 ]
-
-const installSh = `curl -fsSL ${repo}/releases/latest/download/install.sh | sh`
-const installPs = `irm ${repo}/releases/latest/download/install.ps1 | iex`
 
 // A build's asset; a build the release has none of links to the release.
 const asset = (b: Build) => release.assets.find((a) => b.match(a.name))
@@ -127,41 +124,11 @@ function Download() {
           </For>
         </div>
 
-        <div class="install">
-          <h2>用一行命令安装</h2>
-          <p>下载最新版本，装到你的用户目录，以后同样自动更新。</p>
-          <Command label="macOS 与 Linux" text={installSh} />
-          <Command label="Windows PowerShell" text={installPs} />
-        </div>
-
         <p class="fine download-more">
           <GitHubMark size={14} />
           <a href={`${repo}/releases`}>所有版本与更新说明</a>
         </p>
       </section>
     </Layout>
-  )
-}
-
-function Command(props: { label: string; text: string }) {
-  const [copied, setCopied] = createSignal(false)
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const copy = () => {
-    navigator.clipboard?.writeText(props.text).then(() => {
-      setCopied(true)
-      clearTimeout(timer)
-      timer = setTimeout(() => setCopied(false), 1600)
-    })
-  }
-  return (
-    <div class="command">
-      <span class="command-label">{props.label}</span>
-      <div class="command-line">
-        <code>{props.text}</code>
-        <button type="button" class="command-copy" onClick={copy} aria-label={`拷贝${props.label}的安装命令`}>
-          {copied() ? '已拷贝' : '拷贝'}
-        </button>
-      </div>
-    </div>
   )
 }

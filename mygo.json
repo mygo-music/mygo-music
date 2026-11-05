@@ -1,6 +1,6 @@
 {
   "name": "MyGo 音乐",
-  "identifier": "io.github.mygo_music.MyGoMusic",
+  "identifier": "io.github.mygo-music.MyGoMusic",
   "slug": "mygo-music",
   "version": "0.1.25",
   "out": "build",
@@ -9,7 +9,7 @@
     "minimumSystemVersion": "13.0"
   },
   "linux": {
-    "comment": "支持插件扩展的跨平台原生音乐播放器",
+    "comment": "跨平台原生音乐播放器",
     "categories": ["AudioVideo", "Audio", "Player"],
     "webview": false
   }

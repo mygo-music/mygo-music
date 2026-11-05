@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -29,8 +30,12 @@ type release struct {
 	URL   string `json:"html_url"`
 }
 
-// errNoRelease says the repository has published no release yet.
-var errNoRelease = errors.New("no release published")
+// errNoRelease says the repository has published no release yet, and
+// errRateLimited that GitHub is not answering so many requests.
+var (
+	errNoRelease   = errors.New("no release published")
+	errRateLimited = errors.New("GitHub is rate limiting")
+)
 
 // These look up the latest release, say which version runs, and open a link
 // in the browser; tests replace them.
@@ -56,6 +61,8 @@ func fetchLatestRelease() (*release, error) {
 	switch {
 	case res.StatusCode == http.StatusNotFound:
 		return nil, errNoRelease
+	case res.StatusCode == http.StatusForbidden, res.StatusCode == http.StatusTooManyRequests:
+		return nil, errRateLimited
 	case res.StatusCode != http.StatusOK:
 		return nil, fmt.Errorf("GitHub answered %s", res.Status)
 	}
@@ -72,9 +79,10 @@ func fetchLatestRelease() (*release, error) {
 // updateState is what the last look for a new version found.
 type updateState struct {
 	checking bool
-	at       time.Time // when the last check ended; zero before one
-	found    *release  // the release newer than the app, if the last check found one
-	err      string    // why the last check failed
+	at       time.Time // when the last look that got an answer ended; zero before one
+	found    *release  // the release newer than the app, if the last answer was one
+	none     bool      // the last answer was that no release is published
+	err      string    // why the last look failed; what was found before stays
 }
 
 // checkUpdates looks for a new version, unless a look is under way.
@@ -83,24 +91,38 @@ func (a *app) checkUpdates() {
 		return
 	}
 	a.update.checking, a.update.err = true, ""
+	a.invalidateSettings()
 	go func() {
 		rel, err := latestRelease()
 		a.post(func() { a.updateChecked(rel, err) })
 	}()
 }
 
-// updateChecked takes in what a look for a new version found.
+// updateChecked takes in what a look for a new version found. A look that
+// fails leaves what an earlier one found.
 func (a *app) updateChecked(rel *release, err error) {
 	u := &a.update
-	u.checking, u.at, u.found, u.err = false, time.Now(), nil, ""
+	u.checking = false
+	defer a.invalidateSettings()
 	switch {
-	case errors.Is(err, errNoRelease):
-	case err != nil:
+	case errors.Is(err, errRateLimited):
+		u.err = "GitHub 请求过于频繁，请稍后再试"
+		return
+	case err != nil && !errors.Is(err, errNoRelease):
+		log.Println("updates:", err)
 		u.err = "无法连接 GitHub，请稍后再试"
-	case isNewer(rel.Tag, appVersion()):
+		return
+	}
+	u.at, u.err, u.found = time.Now(), "", nil
+	u.none = errors.Is(err, errNoRelease)
+	if err == nil && isNewer(rel.Tag, appVersion()) {
 		u.found = rel
 	}
-	// The settings window shows it; post redraws only the main one.
+}
+
+// invalidateSettings redraws the settings window, which shows the state of
+// the look: post and the menus redraw only the main window.
+func (a *app) invalidateSettings() {
 	if a.settingsWin != nil {
 		a.settingsWin.Invalidate()
 	}
@@ -129,6 +151,8 @@ func (a *app) updateStatus() string {
 		return u.err
 	case u.found != nil:
 		return "有新版本可用"
+	case u.none:
+		return "本仓库还没有发布过版本"
 	case !u.at.IsZero():
 		return "已是最新版本（" + commentTime(u.at, time.Now()) + "检查）"
 	}
@@ -139,7 +163,8 @@ func (a *app) updateStatus() string {
 // changelog's section: a line for each change.
 func releaseSummary(notes string) string {
 	var lines []string
-	for _, line := range strings.Split(notes, "\n") {
+	plain := strings.NewReplacer("**", "", "`", "")
+	for _, line := range strings.Split(plain.Replace(notes), "\n") {
 		line = strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "-*"))
 		if line != "" {
 			lines = append(lines, line)
@@ -181,13 +206,17 @@ func parseVersion(s string) (v version, ok bool) {
 	return v, true
 }
 
-// isNewer reports whether version latest comes after current. Versions that
-// aren't numbers, such as a development build's, are newer when they differ.
+// isNewer reports whether version latest comes after current. A latest that
+// is no version number is no update; a current that isn't one, a
+// development build's, is older than any release.
 func isNewer(latest, current string) bool {
 	l, ok1 := parseVersion(latest)
 	c, ok2 := parseVersion(current)
-	if !ok1 || !ok2 {
-		return strings.TrimPrefix(latest, "v") != strings.TrimPrefix(current, "v")
+	switch {
+	case !ok1:
+		return false
+	case !ok2:
+		return true
 	}
 	for i := range l.n {
 		if l.n[i] != c.n[i] {

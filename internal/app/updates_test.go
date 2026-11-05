@@ -27,6 +27,10 @@ func TestIsNewer(t *testing.T) {
 		{"v0.2.0", "0.2.0-beta.1", true},
 		{"v0.2.0-beta.2", "0.2.0", false},
 		{"v0.2.0", "dev", true},
+		// A tag that is no version, as the sherpa-onnx libraries' release has,
+		// is no update, whatever runs.
+		{"sherpa-onnx-2.0.1", "0.1.25", false},
+		{"v0.2", "0.1.25", false},
 	} {
 		if got := isNewer(c.latest, c.current); got != c.want {
 			t.Errorf("isNewer(%q, %q) = %v, want %v", c.latest, c.current, got, c.want)
@@ -89,6 +93,16 @@ func TestOfferNewRelease(t *testing.T) {
 	}
 	if opened != "https://example.test/r" {
 		t.Fatalf("opened %q", opened)
+	}
+
+	// A look that fails, the network down or GitHub busy, leaves the update
+	// an earlier one found.
+	for _, err := range []error{errors.New("connection refused"), errRateLimited} {
+		a.updateChecked(nil, err)
+		tt.Frame()
+		if _, ok := tt.Find("前往下载"); !ok {
+			t.Fatalf("a failed look (%v) took the update back", err)
+		}
 	}
 
 	for _, answer := range []struct {

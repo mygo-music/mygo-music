@@ -76,4 +76,8 @@ jobs:
           )
           test "${#files[@]}" -gt 0
           ls -l "${files[@]}"
-          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+          # Nothing is signed, so say what the files should be: one list a job.
+          sums="$RUNNER_TEMP/SHA256SUMS-${{ matrix.name }}.txt"
+          shasum -a 256 "${files[@]}" | sed 's#  .*/#  #' > "$sums"
+          cat "$sums"
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}" "$sums"
