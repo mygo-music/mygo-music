@@ -1,7 +1,6 @@
 package netease
 
 import (
-	"fmt"
 	"net/url"
 	"strconv"
 )
@@ -27,7 +26,7 @@ func PersonalFM(mode string) ([]Track, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: personal FM: code %d", res.Code)
+		return nil, apiErr("personal FM", res.Code, "")
 	}
 	// The radio names its songs' fields as the older APIs do: their
 	// details say them, with what the listener may play.
@@ -49,7 +48,7 @@ func FMTrash(id int64) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: FM trash: code %d", res.Code)
+		return apiErr("FM trash", res.Code, "")
 	}
 	return nil
 }
@@ -75,7 +74,7 @@ func HeartMode(song, start, pid int64) ([]Track, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: heart mode: code %d", res.Code)
+		return nil, apiErr("heart mode", res.Code, "")
 	}
 	var tracks []Track
 	for _, d := range res.Data {

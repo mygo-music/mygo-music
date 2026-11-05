@@ -72,7 +72,8 @@ func As[T any](s Source) (T, bool) {
 	return t, ok
 }
 
-// Every method takes a context, which a source stops at when it ends.
+// Every method takes a context, which a source stops at when it ends, where
+// it can: the built-in one does not yet.
 
 // SearchQuery is what a search asks for: one kind of entity, a page of it.
 type SearchQuery struct {
@@ -290,10 +291,19 @@ type LikedState interface {
 	LikedState(ctx context.Context, tracks []Track) (map[string]bool, error)
 }
 
+// Devices a track was played on.
+const (
+	DevicePhone   = "phone"
+	DeviceDesktop = "desktop"
+	DeviceWeb     = "web"
+)
+
 // A Play is a track the listener played.
 type Play struct {
 	Track    Track `json:"track"`
 	PlayedMS int64 `json:"played_ms"`
+	// Device is where it was played: a Device, or empty if unknown.
+	Device string `json:"device,omitempty"`
 }
 
 // A History lists what the listener played last (FeatHistory).

@@ -63,7 +63,7 @@ func PodcastDetail(id int64) (*Podcast, error) {
 		return nil, err
 	}
 	if res.Data == nil || res.Data.ID != id {
-		return nil, fmt.Errorf("netease: no podcast %d", id)
+		return nil, &APIError{What: fmt.Sprintf("no podcast %d", id), Code: CodeNotFound}
 	}
 	return res.Data, nil
 }
@@ -133,7 +133,7 @@ func ProgramsLiked(ids []int64) (map[int64]bool, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: episodes liked: code %d", res.Code)
+		return nil, apiErr("episodes liked", res.Code, "")
 	}
 	liked := make(map[int64]bool, len(res.Data))
 	for _, d := range res.Data {

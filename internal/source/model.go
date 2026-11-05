@@ -39,31 +39,38 @@ const (
 	KindEpisode = "episode"
 )
 
+// PodcastRef names the podcast an episode is of.
+type PodcastRef struct {
+	ID    string `json:"id,omitempty"`
+	Title string `json:"title,omitempty"`
+}
+
 // Episode is what a track that is a podcast's episode is besides its audio.
 type Episode struct {
-	ID      string `json:"id"`
-	Podcast struct {
-		ID    string `json:"id,omitempty"`
-		Title string `json:"title,omitempty"`
-	} `json:"podcast"`
-	Description string `json:"description,omitempty"`
-	PublishedMS int64  `json:"published_ms,omitempty"`
+	ID          string     `json:"id"`
+	Podcast     PodcastRef `json:"podcast"`
+	Description string     `json:"description,omitempty"`
+	PublishedMS int64      `json:"published_ms,omitempty"`
 }
 
 // A Track is a song or an episode that plays.
 type Track struct {
-	// Plugin is the source the track came from. The app sets it; sources do not.
+	// Plugin is the source the track came from. The source sets it, to its ID
+	// (the app trusts no other).
 	Plugin string `json:"plugin,omitempty"`
 	// ID is what Streamer.Resolve takes: a song's, or an episode's audio.
-	ID      string      `json:"id"`
-	Title   string      `json:"title"`
-	Artists []ArtistRef `json:"artists"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Artists may be none; the JSON leaves them out then, not null.
+	Artists []ArtistRef `json:"artists,omitempty"`
 	Album   AlbumRef    `json:"album,omitzero"`
 	// DurationMS is the length in milliseconds.
 	DurationMS int64  `json:"duration_ms,omitempty"`
 	Cover      string `json:"cover,omitempty"`
-	// Playable is false for a track the listener can't play whole.
-	Playable         bool     `json:"playable"`
+	// Playable is nil for a track that plays, and points to false for one the
+	// listener can't play whole: a Track made in Go plays, as one that says
+	// nothing of it in JSON does. Ask with CanPlay.
+	Playable         *bool    `json:"playable,omitempty"`
 	UnplayableReason string   `json:"unplayable_reason,omitempty"`
 	Aliases          []string `json:"aliases,omitempty"`
 	// Reason says why a recommendation was picked.
@@ -79,15 +86,13 @@ type Track struct {
 	Extra json.RawMessage `json:"extra,omitempty"`
 }
 
-// UnmarshalJSON reads a track, which plays unless it says it doesn't.
-func (t *Track) UnmarshalJSON(b []byte) error {
-	type plain Track
-	p := plain{Playable: true}
-	if err := json.Unmarshal(b, &p); err != nil {
-		return err
-	}
-	*t = Track(p)
-	return nil
+// CanPlay reports whether the track plays whole.
+func (t *Track) CanPlay() bool { return t.Playable == nil || *t.Playable }
+
+// SetUnplayable marks the track as one that can't play, and says why.
+func (t *Track) SetUnplayable(reason string) {
+	no := false
+	t.Playable, t.UnplayableReason = &no, reason
 }
 
 // ArtistNames joins the track's artists as the credits read.
@@ -183,12 +188,15 @@ func (p *Playlist) IsLiked() bool { return p.Role == RoleLiked }
 
 // A User is someone on the source, as their page shows them.
 type User struct {
-	ID          string          `json:"id"`
-	Name        string          `json:"name"`
-	Avatar      string          `json:"avatar,omitempty"`
-	Description string          `json:"description,omitempty"`
-	Followed    bool            `json:"followed,omitempty"`
-	Extra       json.RawMessage `json:"extra,omitempty"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Avatar      string `json:"avatar,omitempty"`
+	Description string `json:"description,omitempty"`
+	Followed    bool   `json:"followed,omitempty"`
+	// FollowerCount and FollowingCount are 0 where unknown.
+	FollowerCount  int64           `json:"follower_count,omitempty"`
+	FollowingCount int64           `json:"following_count,omitempty"`
+	Extra          json.RawMessage `json:"extra,omitempty"`
 }
 
 // A Podcast is a channel of episodes.
@@ -345,14 +353,28 @@ type Section struct {
 	Next    string `json:"next,omitempty"`
 	// More says the section has a page of its own, which Feed.Section loads.
 	More bool `json:"more,omitempty"`
+	// ExpiresMS is when the source changes what the section holds, as the
+	// daily songs at 6:00: the app loads it again then. 0 for never.
+	ExpiresMS int64 `json:"expires_ms,omitempty"`
 }
 
+// Types of tab: what a tab lists, in the plural the specification writes.
+const (
+	TabTracks    = "tracks"
+	TabAlbums    = "albums"
+	TabArtists   = "artists"
+	TabPlaylists = "playlists"
+	TabPodcasts  = "podcasts"
+	TabUsers     = "users"
+	TabPosts     = "posts"
+)
+
 // A Tab is a part of an artist's or a user's page, the source's to name and
-// to order: its Type is what it lists, TypeTrack or another.
+// to order.
 type Tab struct {
 	ID    string `json:"id"`
 	Label string `json:"label"`
-	// Type is the kind of entity the tab lists.
+	// Type is what the tab lists: one of the Tab types.
 	Type string `json:"type"`
 }
 
@@ -416,10 +438,13 @@ type Comment struct {
 	LikeCount int     `json:"like_count,omitempty"`
 	Liked     bool    `json:"liked,omitempty"`
 	Location  string  `json:"location,omitempty"`
-	ReplyTo   *struct {
-		UserName string `json:"user_name"`
-		Text     string `json:"text"`
-	} `json:"reply_to,omitempty"`
+	ReplyTo   *Reply  `json:"reply_to,omitempty"`
+}
+
+// Reply is the comment a comment answers.
+type Reply struct {
+	UserName string `json:"user_name"`
+	Text     string `json:"text"`
 }
 
 // Comments are a page of a track's comments; the hot ones come first, on

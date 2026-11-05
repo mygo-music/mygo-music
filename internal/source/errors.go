@@ -50,7 +50,7 @@ func (e *Error) Unwrap() error { return e.Err }
 // Is matches an Error of e's Code.
 func (e *Error) Is(target error) bool {
 	t, ok := target.(*Error)
-	return ok && t.Code == e.Code
+	return ok && t != nil && t.Code == e.Code
 }
 
 // What to match with errors.Is.

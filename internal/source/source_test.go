@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -23,7 +24,7 @@ func TestDecodeTrack(t *testing.T) {
 	if tr.ID != "186016" || tr.Title != "晴天" || tr.ArtistNames() != "周杰伦" || tr.Length().Seconds() != 269 {
 		t.Fatalf("decoded %+v", tr)
 	}
-	if !tr.Playable {
+	if !tr.CanPlay() {
 		t.Fatal("a track that doesn't say otherwise must play")
 	}
 	if got := Sized(tr.CoverURL(), 300); got != "https://x.test/a.jpg?param=300y300" {
@@ -31,8 +32,8 @@ func TestDecodeTrack(t *testing.T) {
 	}
 
 	var no Track
-	if err := json.Unmarshal([]byte(`{"id":"1","title":"x","playable":false}`), &no); err != nil || no.Playable {
-		t.Fatalf("playable:false came back %v, %v", no.Playable, err)
+	if err := json.Unmarshal([]byte(`{"id":"1","title":"x","playable":false}`), &no); err != nil || no.CanPlay() {
+		t.Fatalf("playable:false came back %v, %v", no.CanPlay(), err)
 	}
 }
 
@@ -41,7 +42,7 @@ func TestDecodeTrack(t *testing.T) {
 // newer plugin may send more kinds.
 func TestItemJSON(t *testing.T) {
 	in := []Item{
-		{Type: TypeTrack, Track: &Track{ID: "1", Title: "a", Playable: true}},
+		{Type: TypeTrack, Track: &Track{ID: "1", Title: "a"}},
 		{Type: TypePlaylist, Playlist: &Playlist{ID: "2", Title: "b", Role: RoleLiked}},
 		{Type: TypePodcast, Podcast: &Podcast{ID: "3", Title: "c"}},
 	}
@@ -78,6 +79,40 @@ func TestErrorIs(t *testing.T) {
 	}
 	if Wrap(CodeNetwork, nil) != nil {
 		t.Fatal("nil became an error")
+	}
+	// A nil target is no match, and no panic.
+	if errors.Is(err, (*Error)(nil)) {
+		t.Fatal("matched a nil error")
+	}
+}
+
+// A track made in Go plays, as one that says nothing of it in JSON does; a
+// null leaves a track as it is; and a type that holds a track keeps its own
+// fields, as a snapshot of the queue does.
+func TestTrackPlaysByDefault(t *testing.T) {
+	if !(&Track{}).CanPlay() {
+		t.Fatal("a track made in Go doesn't play")
+	}
+	var tr Track
+	tr.ID = "7"
+	tr.SetUnplayable("下架")
+	if tr.CanPlay() || tr.UnplayableReason != "下架" {
+		t.Fatalf("SetUnplayable: %+v", tr)
+	}
+	if err := json.Unmarshal([]byte(`null`), &tr); err != nil || tr.ID != "7" || tr.CanPlay() {
+		t.Fatalf("null changed the track: %+v, %v", tr, err)
+	}
+	var snap struct {
+		Track
+		SavedAt int64 `json:"saved_at"`
+	}
+	if err := json.Unmarshal([]byte(`{"id":"1","title":"x","saved_at":42}`), &snap); err != nil || snap.SavedAt != 42 || snap.ID != "1" {
+		t.Fatalf("a snapshot lost a field: %+v, %v", snap, err)
+	}
+	// Nothing to say of the artists is nothing in JSON, not null.
+	b, _ := json.Marshal(Track{ID: "1"})
+	if strings.Contains(string(b), "null") {
+		t.Fatalf("encoded %s", b)
 	}
 }
 

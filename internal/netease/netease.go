@@ -153,6 +153,35 @@ func (p *Playlist) Cover() string {
 	return p.PicURL
 }
 
+// An APIError is NetEase's answer that it did not do what was asked, with
+// the code it gives.
+type APIError struct {
+	What    string
+	Code    int
+	Message string
+}
+
+// Codes of an APIError that mean more than that it failed.
+const (
+	CodeNotSignedIn = 301
+	CodeNotFound    = 404
+	CodeTooFrequent = 405
+)
+
+func (e *APIError) Error() string {
+	s := fmt.Sprintf("netease: %s: code %d", e.What, e.Code)
+	if e.Message != "" {
+		s += " " + e.Message
+	}
+	return s
+}
+
+func apiErr(what string, code int, msg string) error {
+	return &APIError{What: what, Code: code, Message: msg}
+}
+
+// ErrUnsupportedFormat is a stream in a format the player doesn't decode.
+var ErrUnsupportedFormat = errors.New("unsupported format")
 type apiError struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
@@ -201,7 +230,7 @@ func do(req *http.Request, out any) error {
 		if msg == "" {
 			msg = status.Msg
 		}
-		return fmt.Errorf("netease: %s: code %d %s", req.URL.Path, status.Code, msg)
+		return apiErr(req.URL.Path, status.Code, msg)
 	}
 	return json.Unmarshal(body, out)
 }
@@ -323,7 +352,7 @@ func SongDetails(ids []int64) ([]Track, error) {
 			return out, err
 		}
 		if res.Code != 200 {
-			return out, fmt.Errorf("netease: song detail: code %d", res.Code)
+			return out, apiErr("song detail", res.Code, "")
 		}
 		withPrivileges(res.Songs, res.Privileges)
 		out = append(out, res.Songs...)
@@ -440,7 +469,7 @@ func SongURL(id int64, level string) (*Stream, error) {
 	s := d.Stream
 	s.Type = strings.ToLower(s.Type)
 	if s.Type != "" && s.Type != "mp3" && s.Type != "flac" {
-		return nil, fmt.Errorf("unsupported format %s", s.Type)
+		return nil, fmt.Errorf("%w %s", ErrUnsupportedFormat, s.Type)
 	}
 	if d.Peak != nil {
 		s.Peak = *d.Peak

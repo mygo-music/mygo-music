@@ -28,7 +28,7 @@ func CreatePlaylist(name string) (*Playlist, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: create playlist: code %d %s", res.Code, res.Message)
+		return nil, apiErr("create playlist", res.Code, res.Message)
 	}
 	pl := res.Playlist
 	if pl.ID == 0 {
@@ -51,7 +51,7 @@ func RenamePlaylist(id int64, name string) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: rename playlist: code %d %s", res.Code, res.Message)
+		return apiErr("rename playlist", res.Code, res.Message)
 	}
 	return nil
 }
@@ -88,7 +88,7 @@ func manipulate(op string, pid int64, songs []int64) error {
 	case 502:
 		return ErrInPlaylist
 	}
-	return fmt.Errorf("netease: %s playlist songs: code %d %s", op, res.Code, res.Message)
+	return apiErr(op+" playlist songs", res.Code, res.Message)
 }
 
 // DeletePlaylist deletes the listener's playlist id, for good.
@@ -101,7 +101,7 @@ func DeletePlaylist(id int64) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: delete playlist: code %d %s", res.Code, res.Message)
+		return apiErr("delete playlist", res.Code, res.Message)
 	}
 	return nil
 }

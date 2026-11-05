@@ -2,7 +2,6 @@ package netease
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -139,7 +138,7 @@ func QRKey() (string, error) {
 		return "", err
 	}
 	if res.Unikey == "" {
-		return "", fmt.Errorf("netease: no QR key (code %d)", res.Code)
+		return "", apiErr("no QR key", res.Code, "")
 	}
 	return res.Unikey, nil
 }
@@ -223,7 +222,7 @@ func LikedIDs(uid int64) ([]int64, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: liked songs: code %d", res.Code)
+		return nil, apiErr("liked songs", res.Code, "")
 	}
 	return res.IDs, nil
 }
@@ -256,7 +255,7 @@ func RecentPlays(limit int) ([]Play, error) {
 		return nil, err
 	}
 	if res.Code != 200 {
-		return nil, fmt.Errorf("netease: recent plays: code %d", res.Code)
+		return nil, apiErr("recent plays", res.Code, "")
 	}
 	plays := make([]Play, len(res.Data.List))
 	songs := make([]Track, len(plays))
@@ -283,7 +282,7 @@ func Like(id int64, like bool) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: like: code %d %s", res.Code, res.Msg)
+		return apiErr("like", res.Code, res.Msg)
 	}
 	return nil
 }

@@ -37,7 +37,7 @@ func subscription(kind string, sub bool, data map[string]any) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: %s: code %d %s", path, res.Code, res.Message)
+		return apiErr(path, res.Code, res.Message)
 	}
 	return nil
 }
@@ -102,7 +102,7 @@ func SubscribePlaylist(id int64, subscribe bool) error {
 		return err
 	}
 	if res.Code != 200 {
-		return fmt.Errorf("netease: %s: code %d %s", path, res.Code, res.Message)
+		return apiErr(path, res.Code, res.Message)
 	}
 	return nil
 }

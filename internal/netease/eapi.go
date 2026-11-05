@@ -150,7 +150,7 @@ func eapiOK(path string, data map[string]any) error {
 		if msg == "" {
 			msg = res.Msg
 		}
-		return fmt.Errorf("netease: %s: code %d %s", path, res.Code, msg)
+		return apiErr(path, res.Code, msg)
 	}
 	return nil
 }

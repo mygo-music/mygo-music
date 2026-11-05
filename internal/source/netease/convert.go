@@ -2,6 +2,7 @@ package netease
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -26,18 +27,6 @@ func number(s string) (int64, error) {
 		return 0, source.Wrap(source.CodeInvalidArgument, err)
 	}
 	return n, nil
-}
-
-func numbers(ids []string) ([]int64, error) {
-	out := make([]int64, len(ids))
-	for i, s := range ids {
-		n, err := number(s)
-		if err != nil {
-			return nil, err
-		}
-		out[i] = n
-	}
-	return out, nil
 }
 
 // image makes a picture address a template the app gives a size to: the
@@ -73,17 +62,19 @@ func track(t api.Track) source.Track {
 		Artists:       artistRefs(t.Artists),
 		Album:         source.AlbumRef{ID: id(t.Album.ID), Name: t.Album.Name, Cover: image(t.Album.PicURL)},
 		DurationMS:    t.Duration,
-		Playable:      t.Playable(),
 		Aliases:       t.Alias,
 		Reason:        t.Reason,
 		CommentThread: t.Thread(),
 		URL:           t.URL(),
 	}
-	if !out.Playable {
-		out.UnplayableReason = "需要会员或单独购买，或已下架"
-		if t.Privilege != nil && t.Privilege.St < 0 {
-			out.UnplayableReason = "已下架"
-		}
+	switch {
+	case t.ID == 0:
+		// An episode with no audio of its own to stream.
+		out.SetUnplayable("这期节目没有音频")
+	case !t.Playable() && t.Privilege != nil && t.Privilege.St < 0:
+		out.SetUnplayable("已下架")
+	case !t.Playable():
+		out.SetUnplayable("需要会员或单独购买，或已下架")
 	}
 	if t.ProgramID > 0 {
 		out.Kind = source.KindEpisode
@@ -120,16 +111,30 @@ type artistExtra struct {
 	AccountID int64 `json:"account_id,omitempty"`
 }
 
+// distinct returns ss without empty strings, nor any after its first: an
+// artist's translated name is often among their aliases too.
+func distinct(ss []string) []string {
+	var out []string
+	for _, s := range ss {
+		if s != "" && !slices.Contains(out, s) {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
 func artist(a api.ArtistProfile) source.Artist {
-	aliases := append([]string(nil), a.Alias...)
-	if a.Trans != "" {
-		aliases = append(aliases, a.Trans)
+	// The square picture, else the wide one.
+	avatar := a.Avatar
+	if avatar == "" {
+		avatar = a.PicURL
 	}
 	out := source.Artist{
-		ID:          id(a.ID),
-		Name:        a.Name,
-		Avatar:      image(a.Avatar),
-		Aliases:     aliases,
+		ID:     id(a.ID),
+		Name:   a.Name,
+		Avatar: image(avatar),
+		// The translated name first, as the page reads them.
+		Aliases:     distinct(append([]string{a.Trans}, a.Alias...)),
 		Description: a.BriefDesc,
 		Followed:    a.Followed,
 		TrackCount:  a.MusicSize,
@@ -172,7 +177,10 @@ func playlists(ps []api.Playlist) []source.Playlist {
 }
 
 func user(u api.User) source.User {
-	return source.User{ID: id(u.UserID), Name: u.Nickname, Avatar: image(u.AvatarURL), Description: u.Signature}
+	return source.User{
+		ID: id(u.UserID), Name: u.Nickname, Avatar: image(u.AvatarURL), Description: u.Signature,
+		FollowerCount: int64(u.Followeds), FollowingCount: int64(u.Follows),
+	}
 }
 
 func userRef(u api.User) source.UserRef {
@@ -207,10 +215,7 @@ func comment(c api.Comment) source.Comment {
 		Location:  c.IPLocation.Location,
 	}
 	if len(c.BeReplied) > 0 {
-		out.ReplyTo = &struct {
-			UserName string `json:"user_name"`
-			Text     string `json:"text"`
-		}{c.BeReplied[0].User.Nickname, c.BeReplied[0].Content}
+		out.ReplyTo = &source.Reply{UserName: c.BeReplied[0].User.Nickname, Text: c.BeReplied[0].Content}
 	}
 	return out
 }
