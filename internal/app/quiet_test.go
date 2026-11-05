@@ -8,6 +8,7 @@ import (
 
 	"github.com/mygo-music/mygo-music/internal/lyrics"
 	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 // quietApp is Now Playing a song sung from 20 s to 30 s, quiet before and
@@ -25,11 +26,11 @@ func quietApp(pos time.Duration) (*app, netease.Track, []lyrics.Line) {
 	a.pl.Cue([]netease.Track{tr})
 	a.pl.SetLyrics(lines)
 	a.pl.Hold(pos)
-	hot := []netease.Comment{
-		{ID: 1, Content: "刮风这天，我试过握着你手", LikedCount: 52000},
-		{ID: 2, Content: "从前从前，有个人爱你很久", LikedCount: 31000},
+	hot := []source.Comment{
+		{ID: "1", Text: "刮风这天，我试过握着你手", LikeCount: 52000},
+		{ID: "2", Text: "从前从前，有个人爱你很久", LikeCount: 31000},
 	}
-	hot[0].User.Nickname, hot[1].User.Nickname = "听众甲", "听众乙"
+	hot[0].User.Name, hot[1].User.Name = "听众甲", "听众乙"
 	a.comments = commentState{track: tr.ID, loaded: true, hot: hot}
 	return a, tr, lines
 }
@@ -41,36 +42,36 @@ func TestQuietComment(t *testing.T) {
 	// for 8.9 s each; the outro, three for 9.27 s, going on from them.
 	for _, c := range []struct {
 		pos  time.Duration
-		want int64
+		want string // the comment's ID, empty for none
 		next time.Duration
 	}{
-		{0, 0, 1200 * time.Millisecond},
-		{5 * s, 1, 5100 * time.Millisecond},
-		{12 * s, 2, 7 * s},
-		{22 * s, 0, 9200 * time.Millisecond},
-		{35 * s, 1, 5467 * time.Millisecond},
-		{45 * s, 2, 4733 * time.Millisecond},
-		{59500 * time.Millisecond, 0, 0},
+		{0, "", 1200 * time.Millisecond},
+		{5 * s, "1", 5100 * time.Millisecond},
+		{12 * s, "2", 7 * s},
+		{22 * s, "", 9200 * time.Millisecond},
+		{35 * s, "1", 5467 * time.Millisecond},
+		{45 * s, "2", 4733 * time.Millisecond},
+		{59500 * time.Millisecond, "", 0},
 	} {
 		cm, next := a.quietComment(&tr, lines, true, c.pos)
-		var id int64
+		var id string
 		if cm != nil {
 			id = cm.ID
 		}
 		if d := next - c.next; id != c.want || d > time.Millisecond || d < -time.Millisecond {
-			t.Errorf("at %v: comment %d, next in %v; want %d, %v", c.pos, id, next, c.want, c.next)
+			t.Errorf("at %v: comment %q, next in %v; want %q, %v", c.pos, id, next, c.want, c.next)
 		}
 	}
 	// Turned off, nothing shows.
 	a.settings.HotComments = false
 	if cm, _ := a.quietComment(&tr, lines, true, 5*s); cm != nil {
-		t.Errorf("showed %q turned off", cm.Content)
+		t.Errorf("showed %q turned off", cm.Text)
 	}
 	a.settings.HotComments = true
 	// No hot comments, nothing shows.
 	a.comments.hot = nil
 	if cm, _ := a.quietComment(&tr, lines, true, 5*s); cm != nil {
-		t.Errorf("showed %q without hot comments", cm.Content)
+		t.Errorf("showed %q without hot comments", cm.Text)
 	}
 }
 

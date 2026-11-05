@@ -15,12 +15,15 @@ func profileOf(u *source.UserRef) *netease.Profile {
 		return nil
 	}
 	id, _ := strconv.ParseInt(u.ID, 10, 64)
-	return &netease.Profile{UserID: id, Nickname: u.Name, AvatarURL: rawPic(u.Avatar)}
+	return &netease.Profile{UserID: id, Nickname: u.Name, AvatarURL: u.Avatar}
 }
 
-// rawPic is a picture's address without the template that sizes it, which
-// the pages that size pictures themselves still add.
-func rawPic(url string) string {
-	before, _, _ := strings.Cut(url, "?param={size}")
-	return before
+// sizedPic sizes a picture whichever form it comes in: a source's template
+// or a plain address that NetEase's client gives. The pages that read the
+// client's types still give the second.
+func sizedPic(url string, px int) string {
+	if strings.Contains(url, "{size}") {
+		return source.Sized(url, px)
+	}
+	return netease.Sized(url, px)
 }

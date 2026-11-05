@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 // skeletonScenes are the views that load, as they show while they do.
@@ -39,7 +40,7 @@ var skeletonScenes = []struct {
 	}},
 	{"more-comments", func(a *app) {
 		a.nowPlaying, a.npPane = true, paneComments
-		a.comments = commentState{track: 1, loading: true, loaded: true, total: 1, latest: []netease.Comment{{ID: 1, Content: "好听"}}}
+		a.comments = commentState{track: 1, loading: true, loaded: true, total: 1, latest: []source.Comment{{ID: "1", Text: "好听"}}}
 	}},
 	{"lyrics", func(a *app) { a.nowPlaying, a.npPane = true, paneLyrics }},
 	{"stage", func(a *app) { a.nowPlaying, a.npPane = true, paneStage }},

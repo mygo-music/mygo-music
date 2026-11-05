@@ -8,6 +8,7 @@ import (
 
 	"github.com/mygo-music/mygo-music/internal/lyrics"
 	"github.com/mygo-music/mygo-music/internal/netease"
+	"github.com/mygo-music/mygo-music/internal/source"
 )
 
 // Through the quiet parts of a song, its intro, an interlude or its outro,
@@ -31,12 +32,12 @@ type quietState struct {
 	track  int64
 	lines  int // how many lines they were found among
 	quiets []lyrics.Quiet
-	cm     *netease.Comment
+	cm     *source.Comment
 }
 
 // quietComment returns the hot comment to show at pos, nil for none, and
 // how long until that changes, 0 for never.
-func (a *app) quietComment(tr *netease.Track, lines []lyrics.Line, loaded bool, pos time.Duration) (*netease.Comment, time.Duration) {
+func (a *app) quietComment(tr *netease.Track, lines []lyrics.Line, loaded bool, pos time.Duration) (*source.Comment, time.Duration) {
 	if !a.settings.HotComments {
 		return nil, 0
 	}
@@ -51,10 +52,10 @@ func (a *app) quietComment(tr *netease.Track, lines []lyrics.Line, loaded bool, 
 			qs.quiets = []lyrics.Quiet{}
 		}
 	}
-	var hot []*netease.Comment
+	var hot []*source.Comment
 	if cs := &a.comments; cs.track == tr.ID {
 		for i := range cs.hot {
-			if n := utf8.RuneCountInString(cs.hot[i].Content); n > 0 && n <= quietRunes {
+			if n := utf8.RuneCountInString(cs.hot[i].Text); n > 0 && n <= quietRunes {
 				hot = append(hot, &cs.hot[i])
 			}
 		}
@@ -146,7 +147,7 @@ func (a *app) hotCard(c *ui.Context, dim, size float32, place func(ui.Element)) 
 		Padding(16, 12).Gap(14).Radius(14).FocusRing(false).Label("查看评论")
 	place(card)
 	// Each comment rises in on its own as it takes the last one's place.
-	seen := ui.Local(card, "seen", func() int64 { return 0 })
+	seen := ui.Local(card, "seen", func() string { return "" })
 	if *seen != cm.ID {
 		*seen = cm.ID
 		card.Jump("in", 0)
@@ -161,14 +162,14 @@ func (a *app) hotCard(c *ui.Context, dim, size float32, place func(ui.Element)) 
 			ui.Icon(c, iconComment).Size(14, 14)
 			ui.Text(c, "热评").FontSize(12.5).FontWeight(700).LetterSpacing(0.6)
 		})
-		ui.Text(c, cm.Content).FontSize(size).FontWeight(600).LineHeight(1.5).TextColor(white.Alpha(0.92)).MaxLines(6)
+		ui.Text(c, cm.Text).FontSize(size).FontWeight(600).LineHeight(1.5).TextColor(white.Alpha(0.92)).MaxLines(6)
 		ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-			a.avatar(c, cm.User.AvatarURL, 22, white.Alpha(0.1))
-			ui.Text(c, cm.User.Nickname).FontSize(13).TextColor(white.Alpha(0.6)).SingleLine().Shrink(1).MinWidth(0)
-			if cm.LikedCount > 0 {
+			a.avatar(c, cm.User.Avatar, 22, white.Alpha(0.1))
+			ui.Text(c, cm.User.Name).FontSize(13).TextColor(white.Alpha(0.6)).SingleLine().Shrink(1).MinWidth(0)
+			if cm.LikeCount > 0 {
 				ui.Row(c).Gap(4).AlignItems(ui.Center).Margin(0, 0, 0, 6).TextColor(white.Alpha(0.45)).Children(func() {
 					ui.Icon(c, iconThumb).Size(13, 13)
-					ui.Text(c, count(cm.LikedCount)).FontSize(12).FontFeatures("tnum")
+					ui.Text(c, count(cm.LikeCount)).FontSize(12).FontFeatures("tnum")
 				})
 			}
 		})
