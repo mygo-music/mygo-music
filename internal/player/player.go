@@ -9,6 +9,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/audio"
 
+	"github.com/mygo-music/mygo-music/internal/fetch"
 	"github.com/mygo-music/mygo-music/internal/lyrics"
 	"github.com/mygo-music/mygo-music/internal/netease"
 )
@@ -591,7 +592,7 @@ func (p *Player) loadSkipping(at, skipped int, play bool, from time.Duration) {
 	p.refill()
 
 	go func() {
-		cover, err := netease.Fetch(netease.Sized(t.Album.PicURL, 600))
+		cover, err := fetch.Get(netease.Sized(t.Album.PicURL, 600))
 		if err == nil {
 			p.post(func() {
 				if gen == p.gen {

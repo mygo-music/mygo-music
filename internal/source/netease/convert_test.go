@@ -3,10 +3,12 @@ package netease
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"slices"
 	"testing"
 	"time"
 
+	"github.com/mygo-music/mygo-music/internal/lyrics"
 	api "github.com/mygo-music/mygo-music/internal/netease"
 	"github.com/mygo-music/mygo-music/internal/source"
 )
@@ -249,5 +251,28 @@ func TestDevice(t *testing.T) {
 		if got := device(os); got != want {
 			t.Errorf("device(%q) = %q, want %q", os, got, want)
 		}
+	}
+}
+
+// What the app shows of NetEase's lyrics is what it showed before the source
+// came between: the lines it makes of what the source gives are the lines
+// Build made of what NetEase served, word-timed or not.
+func TestAppSeesTheSameLyrics(t *testing.T) {
+	lrc := "[00:13.00]从不 主\n[00:17.80]I love"
+	tr := "[00:13.00]Never\n[00:17.80]我爱"
+	yrc := `[13010,4780](13010,660,0)从(13670,670,0)不(14340,30,0) (14370,480,0)主
+[17790,1770](17790,170,0)I(17960,450,0) (18410,290,0)love`
+
+	// Word-timed: the source gives the lines.
+	want := lyrics.Build(lrc, tr, yrc)
+	got := lyrics.FromSource(&source.Lyrics{LRC: lrc, TranslationLRC: tr, Lines: wordTimed(lrc, tr, yrc)})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("word-timed:\n got %+v\nwant %+v", got, want)
+	}
+	// Not: the source gives the LRC, and the app reads it as it always has.
+	want = lyrics.Build(lrc, tr, "")
+	got = lyrics.FromSource(&source.Lyrics{LRC: lrc, TranslationLRC: tr})
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("plain:\n got %+v\nwant %+v", got, want)
 	}
 }
